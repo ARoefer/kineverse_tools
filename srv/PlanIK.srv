@@ -1,0 +1,6 @@
+sensor_msgs/JointState joint_state
+geometry_msgs/Pose     goal
+---
+string  failure
+float64 error
+trajectory_msgs/JointTrajectory trajectory

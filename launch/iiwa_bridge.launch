@@ -1,0 +1,5 @@
+<launch>
+    <rosparam command="load" file="$(find kuka_lbr_iiwa_support)/urdf/lbr_iiwa_14_r820.urdf" param="robot_description"/>
+    <node pkg="kineverse_tools" type="kuka_controller.py" name="iiwa_bridge" output="screen"/>
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="iiwa_state_publisher" output="screen"/>
+</launch>
