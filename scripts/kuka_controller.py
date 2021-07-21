@@ -28,18 +28,21 @@ class IIWAROSBridge(object):
 
     def cb_js_timer(self, *args):
         with self._info_lock:
-            self._latest_info = self.iiwa.getInfo()
+            self._latest_info = self.iiwa.get_info()
 
+        self._js_prototype.header.stamp = rospy.Time.now()
         self._js_prototype.position = list(self._latest_info['joint_positions'])
 
         self.pub_js.publish(self._js_prototype)
 
     def cb_srv_move_to_q(self, req: MoveToQPoseRequest):
+        print('Received command to move to Q-pose:\n  {}'.format(
+                '\n  '.join(f'{j}: {v}' for j, v in sorted(zip(req.pose.name, req.pose.position)))))
         self.iiwa.send_joint_angles_rad(tuple(req.pose.position))
         np_goal = np.array(req.pose.position)
         while True:
             with self._info_lock:
-                if np.max(np.abs(np_goal - self._latest_info)) < 1e-3:
+                if np.max(np.abs(np_goal - self._latest_info['joint_positions'])) < 1e-3:
                     break
             rospy.sleep(0.02)
         

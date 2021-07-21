@@ -1,5 +1,7 @@
+#!/usr/bin/env python3
 import numpy as np
 import rospy
+import sys
 
 from argparse import ArgumentParser, ArgumentTypeError
 from tqdm     import tqdm
@@ -33,11 +35,11 @@ if __name__ == '__main__':
     parser.add_argument('--urdf', '-r', help='Path to the robot urdf. '
                                              'Package paths are allowed')
     parser.add_argument('--link', help='Name of the link to solve for.')
-    parser.add_argument('--vis', type=str2bool, default=False,
-                                 help='Visualize the result to the '
+    parser.add_argument('--vis', type=str, default='none',
+                                 help='Visualize the process and result to the '
                                       'kineverse_ik_solver/vis topic.')
     
-    args = parser.parse_args()
+    args = parser.parse_args([a for a in sys.argv[1:] if ':=' not in a])
 
     if args.link is None:
         print('No link was provided')
@@ -49,13 +51,14 @@ if __name__ == '__main__':
 
     rospy.init_node('kineverse_ik_solver')
 
-    vis = None if not args.vis else ROSBPBVisualizer('~vis', base_frame='world')
+    vis = None if args.vis not in {'plan', 'traj'} \
+               else ROSBPBVisualizer('~vis', base_frame='base_link')
 
     ik_solver = IKSolver(urdf_model, args.link, vis)
 
     def srv_plan_ik_cb(req: PlanIKRequest):
         joint_names = req.joint_state.name
-        q_now  = req.joint_state.position
+        q_now  = list(req.joint_state.position)
         x_goal = [req.goal.position.x,
                   req.goal.position.y,
                   req.goal.position.z,
@@ -81,14 +84,15 @@ if __name__ == '__main__':
 
         trajectory = {ik_solver.km.get_data(f'robot/joints/{j}').position: positions for j, positions in zip(joint_names, path)}
 
-        for x in tqdm(range(len(next(iter(trajectory.values()))))):
-            state = {k: p[x] for k, p in trajectory.items()}
+        if args.vis == 'traj':
+            for x in tqdm(range(len(next(iter(trajectory.values()))))):
+                state = {k: p[x] for k, p in trajectory.items()}
 
-            ik_solver.collision_world.update_world(state)
-            vis.begin_draw_cycle('trajectory')
-            vis.draw_world('trajectory', ik_solver.collision_world, g=0.0, b=0.0)
-            vis.render('trajectory')
-            rospy.sleep(rospy.Duration(0.02))
+                ik_solver.collision_world.update_world(state)
+                vis.begin_draw_cycle('trajectory')
+                vis.draw_world('trajectory', ik_solver.collision_world, g=0.0, b=0.0)
+                vis.render('trajectory')
+                rospy.sleep(rospy.Duration(0.02))
         
         out_spline = resample_spline(cspline, 10)
         resp.error = error
@@ -97,7 +101,7 @@ if __name__ == '__main__':
         
         for row in out_spline:
             point = JointTrajectoryPointMsg()
-            point.time_from_start = row[0]
+            point.time_from_start = rospy.Duration(row[0])
             point.positions  = list(row[1:len(joint_names) + 1])
             point.velocities = list(row[len(joint_names) + 1:])
             resp.trajectory.points.append(point)

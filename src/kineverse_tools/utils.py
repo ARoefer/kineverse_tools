@@ -7,6 +7,15 @@ def make6DOFGimbal(intMarker):
     pitch.orientation.y = 0
     pitch.orientation.z = 0
     pitch.orientation.w = 1
+    pitch.interaction_mode = InteractiveMarkerControlMsg.MOVE_3D
+    pitch.orientation_mode = InteractiveMarkerControlMsg.FIXED
+    intMarker.controls.append(pitch)
+    
+    pitch = InteractiveMarkerControlMsg()
+    pitch.orientation.x = 1
+    pitch.orientation.y = 0
+    pitch.orientation.z = 0
+    pitch.orientation.w = 1
     pitch.interaction_mode = InteractiveMarkerControlMsg.ROTATE_AXIS
     pitch.orientation_mode = InteractiveMarkerControlMsg.FIXED
     intMarker.controls.append(pitch)

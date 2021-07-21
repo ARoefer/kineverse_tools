@@ -1,0 +1,7 @@
+<launch>
+    <!-- <node pkg="kineverse_tools" type="kuka_controller.py" name="iiwa_bridge" output="screen"/> -->
+    <node pkg="kineverse_tools" type="ik_solver.py" name="kineverse_ik_solver" output="screen" args="--urdf package://kineverse_experiment_world/urdf/iiwa_wsg_50.urdf --link wsg_50_tool_frame --vis traj"/>
+    <node pkg="kineverse_tools" type="ik_toy.py" name="ik_toy" output="screen" args="--base base_link --link wsg_50_tool_frame">
+        <remap from="/joint_states" to="/iiwa_bridge/joint_states"/>
+    </node>
+</launch>

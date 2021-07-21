@@ -1,5 +1,15 @@
 <launch>
-    <rosparam command="load" file="$(find kuka_lbr_iiwa_support)/urdf/lbr_iiwa_14_r820.urdf" param="robot_description"/>
-    <node pkg="kineverse_tools" type="kuka_controller.py" name="iiwa_bridge" output="screen"/>
-    <node pkg="robot_state_publisher" type="robot_state_publisher" name="iiwa_state_publisher" output="screen"/>
+    <node name="wsg_50_driver"  pkg="wsg_50_driver" type="wsg_50_ip">
+        <param name="ip" type="string" value="192.168.42.20"/>
+        <param name="port" type="int" value="6666"/>
+    </node>
+    
+    <rosparam command="load" file="$(find kineverse_experiment_world)/urdf/iiwa_wsg_50.urdf" param="robot_description"/>
+    <!-- <node pkg="kineverse_tools" type="kuka_controller.py" name="iiwa_bridge" output="screen"/> -->
+    <node pkg="kineverse_tools" type="iiwa_state_publisher.py" name="iiwa_bridge" output="screen">
+        <remap from="/joint_states" to="/iiwa_bridge/joint_states"/>
+    </node>
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="iiwa_state_publisher" output="screen">
+        <remap from="/joint_states" to="/iiwa_bridge/joint_states"/>
+    </node>
 </launch>

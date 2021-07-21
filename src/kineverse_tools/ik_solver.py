@@ -12,6 +12,43 @@ from kineverse.motion.integrator          import CommandIntegrator
 from kineverse.operations.urdf_operations import load_urdf
 
 
+def ik_solve_one_shot(km, actuated_pose, q_now, goal_pose, visualizer=None, step_limit=50):
+    err_rot = gm.norm(gm.rot_of(goal_pose - actuated_pose).elements())
+    err_lin = gm.norm(gm.pos_of(goal_pose - actuated_pose))
+
+    active_symbols = {s for s in gm.free_symbols(actuated_pose) if gm.get_symbol_type(s) == gm.TYPE_POSITION}
+    controlled_symbols = {gm.DiffSymbol(s) for s in active_symbols}
+
+    controlled_values, constraints = generate_controlled_values(km.get_constraints_by_symbols(controlled_symbols.union(active_symbols)),
+                                                                controlled_symbols)
+
+    collision_world = km.get_active_geometry(active_symbols)
+
+    goal_lin = SoftConstraint(-err_lin, -err_lin, 1.0, err_lin)
+    goal_ang = SoftConstraint(-err_rot, -err_rot, 0.1, err_rot)
+
+    qp = GQPB(collision_world, 
+              constraints,
+              {'IK_constraint_lin': goal_lin,
+               'IK_constraint_ang': goal_ang},
+              controlled_values,
+              visualizer=visualizer)
+
+
+    integrator = CommandIntegrator(qp, start_state=q_now)
+
+    try:
+        integrator.restart(title='IK integrator')
+        integrator.run(dt=0.5, max_iterations=step_limit, logging=False)
+        return integrator.get_latest_error(), integrator.state
+    except Exception as e:
+        traceback.print_exception(type(e), e, e.__traceback__)
+        print(f'IK-Solver crashed:\n{e}')
+
+    return 1.0, {}
+
+
+
 class IKSolver(object):
     def __init__(self, urdf_model, link_name, visualizer=None):
         self.km = GeometryModel()
