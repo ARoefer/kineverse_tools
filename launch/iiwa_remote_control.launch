@@ -1,0 +1,10 @@
+<launch>
+    <include file="$(find smart_eef_control)/launch/servers.launch"/>
+
+    <rosparam command="load" file="$(find smart_eef_control)/config/iiwa_wsg_50.yaml" ns="eef_control"/>
+
+    <node pkg="smart_eef_control" type="eef_control.py" name="eef_control" output="screen">
+        <remap from="/joint_states" to="/iiwa_bridge/joint_states"/>
+        <remap from="/commands" to="/iiwa_bridge/command/velocity"/>
+    </node>
+</launch>

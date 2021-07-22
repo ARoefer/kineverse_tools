@@ -19,15 +19,17 @@ class IIWAStateRepublisher(object):
         self.current_js = JointStateMsg()
         self.current_js.name = [f'joint_a{x}' for x in range(1, 8)] 
 
-        self.pub_js = rospy.Publisher('/joint_states', JointStateMsg, queue_size=1, tcp_nodelay=True)
+        self.pub_js  = rospy.Publisher('/joint_states', JointStateMsg, queue_size=1, tcp_nodelay=True)
+        self.pub_vel_cmd = rospy.Publisher('/iiwa/command/JoinVelocity', JointVelocityMsg, queue_size=1, tcp_nodelay=True)
 
         self.sub_pos = rospy.Subscriber('/iiwa/state/JointPosition', JointPositionMsg, callback=self.cb_position, queue_size=1)
         self.sub_vel = rospy.Subscriber('/iiwa/state/JointVelocity', JointVelocityMsg, callback=self.cb_velocity, queue_size=1)
         self.sub_torque = rospy.Subscriber('/iiwa/state/JointTorque', JointTorqueMsg, callback=self.cb_torque, queue_size=1)
+        
+        self.sub_vel_cmd = rospy.Subscriber('~command/velocity', JointStateMsg, callback=self.cb_js_vel_command, queue_size=1)
 
         rate = rospy.get_param('~rate', 100)
         self.timer = rospy.Timer(rospy.Duration(1.0 / rate), self.cb_publish)
-
 
     def cb_publish(self, *args):
         if self.last_position is not None and self.last_velocity is not None and self.last_torque is not None:
@@ -69,6 +71,21 @@ class IIWAStateRepublisher(object):
         with self.lock:
             self.last_torque = torque
 
+    def cb_js_vel_command(self, cmd):
+        joint_names = [f'joint_a{x}' for x in range(1, 8)]
+
+        if len(cmd.name) != 7 or len(cmd.velocity):
+            print('Invalid command')
+            return
+        
+        cmd = dict(zip(cmd.name, cmd.velocity))
+        iiwa_cmd = JointVelocityMsg()
+        iiwa_cmd.header.stamp = rospy.Time.now()
+        
+        for x, n in enumerate(joint_names):
+            setattr(iiwa_cmd.velocity, f'a{x + 1}', cmd[n])
+
+        self.pub_vel_cmd(iiwa_cmd)
 
 
 if __name__ == '__main__':
