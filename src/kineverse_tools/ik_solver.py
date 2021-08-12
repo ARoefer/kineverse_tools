@@ -5,14 +5,15 @@ import kineverse.gradients.gradient_math as gm
 
 from kineverse.model.paths                import Path
 from kineverse.model.geometry_model       import GeometryModel
-from kineverse.motion.min_qp_builder      import GeomQPBuilder as GQPB, \
+from kineverse.motion.min_qp_builder      import GeomQPBuilder  as GQPB, \
+                                                 TypedQPBuilder as TQPB, \
                                                  SoftConstraint,        \
                                                  generate_controlled_values
 from kineverse.motion.integrator          import CommandIntegrator
 from kineverse.operations.urdf_operations import load_urdf
 
 
-def ik_solve_one_shot(km, actuated_pose, q_now, goal_pose, visualizer=None, step_limit=50):
+def ik_solve_one_shot(km, actuated_pose, q_now, goal_pose, visualizer=None, step_limit=50, solver='GQPB'):
     err_rot = gm.norm(gm.rot_of(goal_pose - actuated_pose).elements())
     err_lin = gm.norm(gm.pos_of(goal_pose - actuated_pose))
 
@@ -27,12 +28,20 @@ def ik_solve_one_shot(km, actuated_pose, q_now, goal_pose, visualizer=None, step
     goal_lin = SoftConstraint(-err_lin, -err_lin, 1.0, err_lin)
     goal_ang = SoftConstraint(-err_rot, -err_rot, 0.1, err_rot)
 
-    qp = GQPB(collision_world, 
-              constraints,
-              {'IK_constraint_lin': goal_lin,
-               'IK_constraint_ang': goal_ang},
-              controlled_values,
-              visualizer=visualizer)
+    if solver == 'GQPB':
+        qp = GQPB(collision_world, 
+                  constraints,
+                  {'IK_constraint_lin': goal_lin,
+                   'IK_constraint_ang': goal_ang},
+                  controlled_values,
+                  visualizer=visualizer)
+    elif solver == 'TQPB':
+        qp = TQPB(constraints,
+                  {'IK_constraint_lin': goal_lin,
+                   'IK_constraint_ang': goal_ang},
+                  controlled_values)
+    else:
+        raise Exception(f'Unknown solver "{solver}"')
 
 
     integrator = CommandIntegrator(qp, start_state=q_now)
