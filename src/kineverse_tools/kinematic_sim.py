@@ -49,14 +49,13 @@ class KineverseKinematicSim(object):
         self.flat_state = np.zeros(len(self.state_map))
         self.flat_state[0] = 1.0 / update_rate
 
-        print(self.flat_state)
-        print(self.state_map.keys())
+        print(self.controls_vector)
 
         self.state_info = {}
 
         for s in self.state_map.keys():
             if gm.get_symbol_type(s) in {gm.TYPE_POSITION, gm.TYPE_VELOCITY}:
-                s_str_typeless = str(gm.erase_type(s))
+                s_str_typeless = str(Path(gm.erase_type(s))[-1])
                 if s_str_typeless not in self.state_info:
                     self.state_info[s_str_typeless] = StateContainer()
 
@@ -77,23 +76,30 @@ class KineverseKinematicSim(object):
     def process_command(self, msg):
         if type(msg) == JointStateMsg:
             for x, name in enumerate(msg.name):
-                if name != str(DT_SYM):
+                if name != str(DT_SYM) and name in self.state_info:
+                    info = self.state_info[name]
+
                     if len(msg.position) > x:
-                        s_pos = gm.Position(name)
-                        if s_pos in self.state_map:
-                            self.flat_state[self.state_map[s_pos]] = msg.position[x]
+                        if info.position is not None:
+                            self.flat_state[info.position] = msg.position[x]
+                            print(f'Set position for {name}: {msg.position[x]}')
                     if len(msg.velocity) > x:
-                        s_vel = gm.Velocity(name)
-                        if s_vel in self.state_map:
-                            self.flat_state[self.state_map[s_vel]] = msg.velocity[x]
+                        if info.velocity is not None:
+                            self.flat_state[info.velocity] = msg.velocity[x]
+                            print(f'Set velocity for {name}: {msg.velocity[x]}')
         elif type(msg) == ValueMapMsg:
             for name, value in zip(msg.name, msg.value):
                 sym = gm.Symbol(name)
                 if sym != DT_SYM and sym in self.state_map:
                     self.flat_state[self.state_map[sym]] = value
 
+        print(self.flat_state)
+        print('\n'.join(f'{name} - pos: {info.position} vel: {info.velocity}' for name, info in self.state_info.items()))
+
     def cb_update(self, *args):
-        self.flat_state[1:len(self.state_vars) + 1] = self.transition_function.call2(self.flat_state)
+        update = self.transition_function.call2(self.flat_state).flatten()
+        for s, v in zip(self.state_vars, update):
+            self.flat_state[self.state_map[s]] = v
 
         for x, name in enumerate(self.template_msg.name):
             info = self.state_info[name]
