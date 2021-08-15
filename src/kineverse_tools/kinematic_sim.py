@@ -26,7 +26,8 @@ class KineverseKinematicSim(object):
                        command_topic='~command',
                        integration_rules=None,
                        update_rate=50,
-                       command_type=JointStateMsg):
+                       command_type=JointStateMsg,
+                       watchdog_period=0.2):
         self.model = km.get_data(model_path)
         self.broadcaster = ModelTFBroadcaster_URDF(urdf_param, model_path, self.model)
 
@@ -36,8 +37,6 @@ class KineverseKinematicSim(object):
             frame = km.get_data(f_path)
             state_symbols.update(gm.free_symbols(frame.pose))
             control_symbols.update(gm.get_diff_symbols(frame.pose))
-
-        print(state_symbols)
 
         self.state_vars, \
         self.transition_function, \
@@ -49,7 +48,8 @@ class KineverseKinematicSim(object):
         self.flat_state = np.zeros(len(self.state_map))
         self.flat_state[0] = 1.0 / update_rate
 
-        print(self.controls_vector)
+        self.vel_watchdogs = [None] * len(self.state_map)
+        self.watchdog_period = rospy.Duration(watchdog_period)
 
         self.state_info = {}
 
@@ -64,6 +64,8 @@ class KineverseKinematicSim(object):
                 elif gm.get_symbol_type(s) == gm.TYPE_VELOCITY:
                     self.state_info[s_str_typeless].velocity = self.state_map[s]
 
+        print('Command variables:\n  {}'.format('\n  '.join(sorted(self.state_info.keys()))))
+
         self.template_msg = JointStateMsg()
         self.template_msg.name = list(self.state_info.keys())
         self.template_msg.position = [0] * len(list(self.state_info.keys()))
@@ -74,6 +76,8 @@ class KineverseKinematicSim(object):
         self.timer_update = rospy.Timer(rospy.Duration(self.flat_state[0]), self.cb_update)
 
     def process_command(self, msg):
+        now = rospy.Time.now()
+
         if type(msg) == JointStateMsg:
             for x, name in enumerate(msg.name):
                 if name != str(DT_SYM) and name in self.state_info:
@@ -82,21 +86,31 @@ class KineverseKinematicSim(object):
                     if len(msg.position) > x:
                         if info.position is not None:
                             self.flat_state[info.position] = msg.position[x]
-                            print(f'Set position for {name}: {msg.position[x]}')
+                            # print(f'Set position for {name}: {msg.position[x]}')
                     if len(msg.velocity) > x:
                         if info.velocity is not None:
                             self.flat_state[info.velocity] = msg.velocity[x]
-                            print(f'Set velocity for {name}: {msg.velocity[x]}')
+                            self.vel_watchdogs[info.velocity] = now
+                            # print(f'Set velocity for {name} ({info.velocity}): {msg.velocity[x]}')
         elif type(msg) == ValueMapMsg:
-            for name, value in zip(msg.name, msg.value):
-                sym = gm.Symbol(name)
-                if sym != DT_SYM and sym in self.state_map:
-                    self.flat_state[self.state_map[sym]] = value
-
-        print(self.flat_state)
-        print('\n'.join(f'{name} - pos: {info.position} vel: {info.velocity}' for name, info in self.state_info.items()))
+            for str_symbol, value in zip(msg.symbol, msg.value):
+                sym = gm.Symbol(str_symbol)
+                if str_symbol != str(DT_SYM) and sym in self.state_map:
+                    x = self.state_map[sym]
+                    self.flat_state[x] = value
+                    if gm.get_symbol_type(sym) == gm.TYPE_VELOCITY:
+                        self.vel_watchdogs[x] = now
+                else:
+                    print(f'Command attempted to set {sym} but that variable is unknown. '
+                           'Vars are:\n  {}'.format('\n  '.join(str(s) for s in self.state_map.keys())))
 
     def cb_update(self, *args):
+        now = rospy.Time.now()
+        for x, stamp in enumerate(self.vel_watchdogs):
+            if stamp is not None and (now - stamp) > self.watchdog_period:
+                self.flat_state[x] = 0
+                self.vel_watchdogs[x] = None
+
         update = self.transition_function.call2(self.flat_state).flatten()
         for s, v in zip(self.state_vars, update):
             self.flat_state[self.state_map[s]] = v
@@ -113,7 +127,7 @@ class KineverseKinematicSim(object):
             else:
                 self.template_msg.velocity[x] = 0
 
-        self.template_msg.header.stamp = rospy.Time.now()
+        self.template_msg.header.stamp = now
         self.pub_state.publish(self.template_msg)
 
         self.broadcaster.update_state(dict(zip(self.controls_vector, self.flat_state)))
