@@ -1,4 +1,6 @@
 import traceback
+import numpy as np
+
 from typing import Iterable
 
 import kineverse.gradients.gradient_math as gm
@@ -14,6 +16,8 @@ from kineverse.operations.urdf_operations import load_urdf
 
 
 def ik_solve_one_shot(km, actuated_pose, q_now, goal_pose, visualizer=None, step_limit=50, solver='GQPB'):
+    if type(goal_pose) == np.ndarray: # Numpy is unhappy with gradient matrices
+        goal_pose = gm.Matrix(goal_pose)
     err_rot = gm.norm(gm.rot_of(goal_pose - actuated_pose).elements())
     err_lin = gm.norm(gm.pos_of(goal_pose - actuated_pose))
 
