@@ -59,7 +59,7 @@ def ik_solve_one_shot(km, actuated_pose, q_now, goal_pose, visualizer=None, step
 
 
 class IKSolver(object):
-    def __init__(self, km, actuated_pose, visualizer=None):
+    def __init__(self, km, actuated_pose, visualizer=None, controls_blacklist=None):
         self.km = km
 
         self.goal_x, self.goal_y, self.goal_z = [gm.Symbol(f'goal_{s}') for s in 'xyz']
@@ -81,22 +81,32 @@ class IKSolver(object):
         err_rot = gm.norm(gm.rot_of(self.goal_pose - eef).elements())
         err_lin = gm.norm(gm.pos_of(self.goal_pose - eef))
 
+        controls_blacklist = set() if controls_blacklist is None else controls_blacklist
+
         self.joint_symbols = [s for s in gm.free_symbols(actuated_pose) if gm.get_symbol_type(s) == gm.TYPE_POSITION]
-        controlled_symbols = {gm.DiffSymbol(s) for s in self.joint_symbols}
+        controlled_symbols = {gm.DiffSymbol(s) for s in self.joint_symbols if gm.DiffSymbol(s) not in controls_blacklist}
 
         controlled_values, constraints = generate_controlled_values(self.km.get_constraints_by_symbols(controlled_symbols.union(self.joint_symbols)),
                                                                     controlled_symbols)
-        self.collision_world = self.km.get_active_geometry(self.joint_symbols)
+
+        if isinstance(km, GeometryModel):
+            self.collision_world = self.km.get_active_geometry(self.joint_symbols)
 
         goal_lin = SoftConstraint(-err_lin, -err_lin, 1.0, err_lin)
         goal_ang = SoftConstraint(-err_rot, -err_rot, 0.1, err_rot)
 
-        self.qp = GQPB(self.collision_world, 
-                       constraints,
-                       {'IK_constraint_lin': goal_lin,
-                        'IK_constraint_ang': goal_ang},
-                       controlled_values,
-                       visualizer=visualizer)
+        if hasattr(self, 'collision_world'):
+            self.qp = GQPB(self.collision_world, 
+                           constraints,
+                           {'IK_constraint_lin': goal_lin,
+                            'IK_constraint_ang': goal_ang},
+                           controlled_values,
+                           visualizer=visualizer)
+        else:
+            self.qp = TQPB(constraints,
+                           {'IK_constraint_lin': goal_lin,
+                            'IK_constraint_ang': goal_ang},
+                           controlled_values)
 
     def solve(self, q_now : dict, p_goal : Iterable, step_limit=50):
         """Attempts to solve IK for the given pose, 
@@ -125,6 +135,7 @@ class IKSolver(object):
             print(f'IK-Solver crashed:\n{e}')
 
         return 1.0, {}
+
 
 class URDF_IKSolver(IKSolver):
     def __init__(self, urdf_model, link_name, visualizer=None):
