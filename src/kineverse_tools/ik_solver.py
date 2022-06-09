@@ -86,6 +86,8 @@ class IKSolver(object):
         controlled_values, constraints = generate_controlled_values(self.km.get_constraints_by_symbols(controlled_symbols.union(self.joint_symbols)),
                                                                     controlled_symbols)
         self.collision_world = self.km.get_active_geometry(self.joint_symbols)
+        # Variables of the collision world are often more than the controlled ones
+        self.collision_world.update_world({s: 0 for s in self.collision_world.free_symbols})
 
         goal_lin = SoftConstraint(-err_lin, -err_lin, 1.0, err_lin)
         goal_ang = SoftConstraint(-err_rot, -err_rot, 0.1, err_rot)
