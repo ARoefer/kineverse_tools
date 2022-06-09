@@ -1,18 +1,13 @@
 import traceback
 import numpy as np
 
+from kineverse        import gm, Path, GeometryModel, load_urdf
+from kineverse.motion import GQPB, \
+                             TQPB, \
+                             SoftConstraint, \
+                             generate_controlled_values, \
+                             CommandIntegrator
 from typing import Iterable
-
-import kineverse.gradients.gradient_math as gm
-
-from kineverse.model.paths                import Path
-from kineverse.model.geometry_model       import GeometryModel
-from kineverse.motion.min_qp_builder      import GeomQPBuilder  as GQPB, \
-                                                 TypedQPBuilder as TQPB, \
-                                                 SoftConstraint,        \
-                                                 generate_controlled_values
-from kineverse.motion.integrator          import CommandIntegrator
-from kineverse.operations.urdf_operations import load_urdf
 
 
 def ik_solve_one_shot(km, actuated_pose, q_now, goal_pose, visualizer=None, step_limit=50, solver='GQPB'):
